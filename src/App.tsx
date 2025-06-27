@@ -1,5 +1,6 @@
 
 import {css} from "@emotion/react";
+import Pixelation from "./Pixelation.tsx";
 
 function App() {
     return (
@@ -11,7 +12,7 @@ function App() {
         align-items: center;
         justify-content: center;
       `}>
-
+            <Pixelation />
         </div>
     )
 }
