@@ -1,25 +1,31 @@
 /** @jsxImportSource @emotion/react */
 import { useRef, useState, useEffect } from 'react';
 import styled from '@emotion/styled';
+import {css} from "@emotion/react";
+
+
+const Wrapper = styled.div`
+  width: 100%;
+  height: 100%;
+  padding: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+  box-sizing: border-box;
+`;
 
 const Container = styled.div`
   background: #fff;
-  padding: 30px;
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
   max-width: 700px;
   width: 100%;
+  height: 100%;
   text-align: center;
-`;
-
-const Wrapper = styled.div`
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
   display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  margin: 0;
+  flex-direction: column;
 `;
 
 const Title = styled.h1`
@@ -33,7 +39,7 @@ const Controls = styled.div`
   flex-wrap: wrap;
   justify-content: center;
   gap: 20px;
-  margin-bottom: 20px;
+ 
   align-items: center;
 `;
 
@@ -115,10 +121,20 @@ const Label = styled.span`
   text-align: center;
 `;
 
+const CanvasContainer = styled.div`
+    width: 100%;
+    height: 100%;
+    padding:20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    box-sizing: border-box;
+`;
+
 const CanvasStyled = styled.canvas`
   display: block;
-  max-width: 100%;
-  height: auto;
+  height: 350px;  
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 `;
@@ -198,12 +214,8 @@ export default function Pixelation() {
     return (
         <Wrapper>
             <Container>
-                <Title>픽셀화 &gt; 모드 컬러 데모</Title>
+                <Title>픽셀화 모드</Title>
                 <Controls>
-                    <FileButton>
-                        <button>이미지 선택</button>
-                        <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} />
-                    </FileButton>
                     <SliderContainer>
                         <label htmlFor="exp">단계:</label>
                         <RangeInput
@@ -216,8 +228,14 @@ export default function Pixelation() {
                         />
                         <Label>{labelText}</Label>
                     </SliderContainer>
+                    <FileButton>
+                        <button>이미지 선택</button>
+                        <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} />
+                    </FileButton>
                 </Controls>
-                <CanvasStyled ref={canvasRef} />
+                <CanvasContainer>
+                    <CanvasStyled ref={canvasRef}/>
+                </CanvasContainer>
             </Container>
         </Wrapper>
     );
