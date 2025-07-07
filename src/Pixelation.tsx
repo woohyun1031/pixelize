@@ -180,74 +180,92 @@ export default function Pixelation() {
     const [fullData, setFullData] = useState(null);
     const [imgSize, setImgSize] = useState({w:0, h:0});
     const [saveImgSize, setSaveImgSize] = useState({w:0, h:0});
+    const [stepCanvases, setStepCanvases] = useState<(HTMLCanvasElement | null)[]>(Array(steps.length + 1).fill(null));
 
-    const handleFileChange = (e:  React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || !files[0]) return;
+        const file = files[0];
         const img = new Image();
         img.onload = () => {
             const imgW = img.width, imgH = img.height;
-            const canvas = canvasRef.current;
+            setImgSize({ w: imgW, h: imgH });
+            setSaveImgSize({ w: imgW, h: imgH });
 
-            if (!canvas) return;
-            canvas.width = imgW; canvas.height = imgH;
-            const originCanvas = originCanvasRef.current;
-            originCanvas.width = imgW; originCanvas.height = imgH;
+            // 원본 데이터 저장
+            const originCanvas = document.createElement('canvas');
+            originCanvas.width = imgW;
+            originCanvas.height = imgH;
             const offCtx = originCanvas.getContext('2d');
-            offCtx?.drawImage(img,0,0);
-            const data = offCtx?.getImageData(0,0,imgW,imgH).data;
+            offCtx?.drawImage(img, 0, 0);
+            const data = offCtx?.getImageData(0, 0, imgW, imgH).data;
+            setFullData(data ? new Uint8ClampedArray(data) : null);
 
-            setImgSize({w: imgW, h: imgH});
-            setSaveImgSize({w: imgW, h: imgH});
-            setFullData(data);
+            // 각 step별로 미리 캔버스 생성
+            const canvases: (HTMLCanvasElement | null)[] = [];
+            for (let expIdx = 0; expIdx <= steps.length; expIdx++) {
+                const canvas = document.createElement('canvas');
+                canvas.width = imgW;
+                canvas.height = imgH;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    canvases.push(null);
+                    continue;
+                }
+                if (expIdx === steps.length) {
+                    // 원본
+                    ctx.drawImage(img, 0, 0);
+                } else {
+                    const blocks = steps[expIdx];
+                    const stepX = Math.ceil(imgW / blocks);
+                    const stepY = Math.ceil(imgH / blocks);
+                    for (let by = 0; by < imgH; by += stepY) {
+                        for (let bx = 0; bx < imgW; bx += stepX) {
+                            const w = Math.min(stepX, imgW - bx);
+                            const h = Math.min(stepY, imgH - by);
+                            let counts: Record<number, number> = {}, maxKey = 0, maxCount = 0;
+                            for (let y = 0; y < h; y++) {
+                                let offset = ((by + y) * imgW + bx) * 4;
+                                for (let x = 0; x < w; x++, offset += 4) {
+                                    const key = (data![offset] << 16) | (data![offset + 1] << 8) | data![offset + 2];
+                                    const cnt = (counts[key] = (counts[key] || 0) + 1);
+                                    if (cnt > maxCount) { maxCount = cnt; maxKey = key; }
+                                }
+                            }
+                            const r = (maxKey >> 16) & 0xFF;
+                            const g = (maxKey >> 8) & 0xFF;
+                            const b = maxKey & 0xFF;
+                            ctx.fillStyle = `rgb(${r},${g},${b})`;
+                            ctx.fillRect(bx, by, w, h);
+                        }
+                    }
+                }
+                canvases.push(canvas);
+            }
+            setStepCanvases(canvases);
             setExp(steps.length);
         };
-
         img.src = URL.createObjectURL(file);
     };
+
     useEffect(() => {
-        console.log(fullData)
-        if (!fullData) return;
+        if (!stepCanvases[exp]) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        const offCanvas = originCanvasRef.current;
         const { w: imgW, h: imgH } = imgSize;
-
-        ctx.clearRect(0,0,imgW,imgH);
+        canvas.width = imgW;
+        canvas.height = imgH;
+        ctx.clearRect(0, 0, imgW, imgH);
 
         if (exp === steps.length) {
             setLabelText('원본');
-            ctx.drawImage(offCanvas, 0, 0);
-            return;
+        } else {
+            setLabelText(`${steps[exp]}×${steps[exp]}`);
         }
-        const blocks = steps[exp];
-        setLabelText(`${blocks}×${blocks}`);
-        const stepX = Math.ceil(imgW / blocks);
-        const stepY = Math.ceil(imgH / blocks);
-
-        for (let by=0; by<imgH; by+=stepY) {
-            for (let bx=0; bx<imgW; bx+=stepX) {
-                const w = Math.min(stepX, imgW-bx);
-                const h = Math.min(stepY, imgH-by);
-                let counts = Object.create(null), maxKey=0, maxCount=0;
-                for (let y=0; y<h; y++) {
-                    let offset = ((by+y)*imgW + bx)*4;
-                    for (let x=0; x<w; x++, offset+=4) {
-                        const key = (fullData[offset]<<16) | (fullData[offset+1]<<8) | fullData[offset+2];
-                        const cnt = (counts[key] = (counts[key]||0)+1);
-                        if (cnt>maxCount) { maxCount=cnt; maxKey=key; }
-                    }
-                }
-                const r = (maxKey>>16)&0xFF;
-                const g = (maxKey>>8)&0xFF;
-                const b = maxKey&0xFF;
-                ctx.fillStyle = `rgb(${r},${g},${b})`;
-                ctx.fillRect(bx,by,w,h);
-            }
-        }
-    }, [exp, fullData, imgSize]);
+        ctx.drawImage(stepCanvases[exp]!, 0, 0);
+    }, [exp, stepCanvases, imgSize]);
 
     return (
         <Wrapper>
