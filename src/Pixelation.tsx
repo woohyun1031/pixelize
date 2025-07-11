@@ -167,8 +167,7 @@ const steps = [2,4,8,16,32,64,128,256];
 export default function Pixelation() {
     const fileRef = useRef(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const originCanvasRef = useRef(document.createElement('canvas'));
-
+    // exp는 현재 단계(픽셀화 정도)를 나타내며, 0부터 steps.length까지의 값을 가질 수 있음
     const [exp, setExp] = useState(7);
     const [labelText, setLabelText] = useState('256×256');
     // fullData는 이미지의 픽셀 데이터를 저장하는 배열
@@ -177,32 +176,45 @@ export default function Pixelation() {
     // 예: [192, 149, 68, 255,   232, 190, 112, 255 ...]
     // fullData의 길이는 이미지의 가로 픽셀 수 * 세로 픽셀 수 * 4
     // 예: 1024 * 1024 * 4채널(R,G,B,A) = 4194304
-    const [fullData, setFullData] = useState(null);
+    const [fullData, setFullData] = useState<Uint8ClampedArray | null>(null);
+    // imgSize는 현재 로드된 이미지의 가로, 세로 크기를 저장
     const [imgSize, setImgSize] = useState({w:0, h:0});
+    // saveImgSize는 저장할 이미지의 크기를 조정하기 위한 상태
     const [saveImgSize, setSaveImgSize] = useState({w:0, h:0});
+    // stepCanvases는 각 단계별로 생성된 캔버스를 저장하는 배열
     const [stepCanvases, setStepCanvases] = useState<(HTMLCanvasElement | null)[]>(Array(steps.length + 1).fill(null));
 
+    // handleFileChange는 파일 입력이 변경될 때 호출되어 이미지를 로드하고 픽셀화 단계를 준비
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
+        // 파일이 선택되지 않았거나 첫 번째 파일이 없으면 아무 작업도 하지 않음
         if (!files || !files[0]) return;
         const file = files[0];
         const img = new Image();
+
         img.onload = () => {
-            const imgW = img.width, imgH = img.height;
+            // 이미지가 로드되면 캔버스 크기와 원본 데이터를 설정
+            const imgW = img.width,
+                  imgH = img.height;
+
             setImgSize({ w: imgW, h: imgH });
+            // 저장할 이미지 크기를 원본 크기로 초기화
             setSaveImgSize({ w: imgW, h: imgH });
 
             // 원본 데이터 저장
             const originCanvas = document.createElement('canvas');
             originCanvas.width = imgW;
             originCanvas.height = imgH;
+            // 원본 캔버스에 이미지 그리기
             const offCtx = originCanvas.getContext('2d');
             offCtx?.drawImage(img, 0, 0);
+            // 원본 이미지 데이터를 Uint8ClampedArray로 변환하여 fullData에 저장
             const data = offCtx?.getImageData(0, 0, imgW, imgH).data;
             setFullData(data ? new Uint8ClampedArray(data) : null);
 
             // 각 step별로 미리 캔버스 생성
             const canvases: (HTMLCanvasElement | null)[] = [];
+            // steps.length + 1 단계까지 반복 (원본 포함)
             for (let expIdx = 0; expIdx <= steps.length; expIdx++) {
                 const canvas = document.createElement('canvas');
                 canvas.width = imgW;
@@ -212,23 +224,56 @@ export default function Pixelation() {
                     canvases.push(null);
                     continue;
                 }
+                // 원본 체크
                 if (expIdx === steps.length) {
-                    // 원본
                     ctx.drawImage(img, 0, 0);
                 } else {
                     const blocks = steps[expIdx];
+                    // 현재 단계에 해당하는 블록 크기 계산
                     const stepX = Math.ceil(imgW / blocks);
+                    // 세로 블록 크기도 동일하게 계산
                     const stepY = Math.ceil(imgH / blocks);
+                    // 캔버스에 픽셀화된 이미지 그리기
+                    // 각 블록을 순회하며 가장 많이 등장하는 색상을 찾아서 그리기
+                    // y좌표에 해당하는 블록의 시작 위치
                     for (let by = 0; by < imgH; by += stepY) {
+                        // x좌표에 해당하는 블록의 시작 위치
                         for (let bx = 0; bx < imgW; bx += stepX) {
+                            // 현재 블록의 크기 계산
+                            // 블록의 너비와 높이를 이미지 크기와 비교하여 조정
+
+                            // stepX와 stepY는 현재 단계의 블록 크기
+                            // Math.min을 사용하는 이유는 이미지의 크기가 블록 크기보다 작을 수 있기 때문
+                            // 예를 들어 이미지 크기가 500x500이고, 현재 단계가 256x256이라면
+                            // 블록의 크기는 256x256이지만, 이미지의 오른쪽과 아래쪽은 244x244 픽셀만큼 남게 됨
                             const w = Math.min(stepX, imgW - bx);
                             const h = Math.min(stepY, imgH - by);
-                            let counts: Record<number, number> = {}, maxKey = 0, maxCount = 0;
+                            // 현재 블록의 픽셀 데이터를 가져오기 위해 데이터 배열을 초기화
+                            // counts 객체는 각 색상(24비트 정수)의 등장 횟수를 저장
+                            let counts: Record<number, number> = {},
+                                // maxKey는 가장 많이 등장한 색상의 24비트 정수 값
+                                maxKey = 0,
+                                // maxCount는 가장 많이 등장한 색상의 카운트
+                                maxCount = 0;
+
+                            // 블록 내의 픽셀 데이터를 순회하며 색상 카운트
                             for (let y = 0; y < h; y++) {
+                                // 현재 블록의 픽셀 데이터 오프셋 계산
+                                // 픽셀 데이터 오프셋이란 해당 블록의 시작 위치를 기준으로 픽셀 데이터 배열에서의 인덱스
                                 let offset = ((by + y) * imgW + bx) * 4;
+                                // 블록의 너비만큼 반복
                                 for (let x = 0; x < w; x++, offset += 4) {
+                                    // 현재 픽셀의 RGB 값을 24비트 정수로 결합
+                                    // 24비트 정수는 R, G, B 값을 각각 8비트씩 왼쪽으로 이동하여 결합한 값
+                                    // 예: R=192, G=149, B=68 -> key = (192 << 16) | (149 << 8) | 68
                                     const key = (data![offset] << 16) | (data![offset + 1] << 8) | data![offset + 2];
+                                    // counts 객체에 해당 색상의 카운트를 증가시킴
+                                    // key는 24비트 정수로 표현된 RGB 색상 값
+                                    // counts[key]는 해당 색상이 몇 번 등장했는지를 저장
+
                                     const cnt = (counts[key] = (counts[key] || 0) + 1);
+                                    // 현재 색상의 카운트가 최대 카운트보다 크면 최대 카운트와 해당 색상 키를 업데이트
+                                    // maxKey는 가장 많이 등장한 색상의 24비트 정수 값
                                     if (cnt > maxCount) { maxCount = cnt; maxKey = key; }
                                 }
                             }
@@ -248,6 +293,7 @@ export default function Pixelation() {
         img.src = URL.createObjectURL(file);
     };
 
+    // exp가 변경될 때마다 해당 단계의 캔버스를 업데이트
     useEffect(() => {
         if (!stepCanvases[exp]) return;
         const canvas = canvasRef.current;
